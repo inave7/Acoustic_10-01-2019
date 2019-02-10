@@ -22,6 +22,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.preference.PreferenceManager;
+import android.provider.MediaStore;
 import android.renderscript.Allocation;
 import android.renderscript.Element;
 import android.renderscript.RenderScript;
@@ -64,8 +66,10 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -78,7 +82,7 @@ public class PlayerActivity extends AppCompatActivity {
 
     private static final int EQ_CODE = 2;
     private Intent playerintent;
-    private ImageButton ImgBtnPlayPause, ImgBtnNext, ImgBtnPrev, ImgBtnff, ImgBtnrev, ImgBtnLyrics, ImgBtnEqualizer;
+    private ImageButton ImgBtnPlayPause, ImgBtnNext, ImgBtnPrev, ImgBtnff, ImgBtnrev, ImgBtnLyrics, ImgBtnEqualizer, ImgBtnPl;
     public static MediaPlayer MyMediaPlayer;
     private static final String CHANNEL_ID = "myMusicService";
     //   public ArrayList<AudioSong> mAudioSongs;
@@ -96,14 +100,13 @@ public class PlayerActivity extends AppCompatActivity {
     private String artistName, albumName;
     private ArrayList<AudioSong> artistSongs = new ArrayList<>(), albumSongs = new ArrayList<>();
     private FloatingActionButton fabBg;
-    private ImageView ImgvTimer, Imgvrepeat, ImgvShuffle, ImgvFav, ImgvPl;
+    private ImageView ImgvTimer, Imgvrepeat, ImgvShuffle, ImgvFav;
     private MainActivity mainActivity = new MainActivity();
     public ArrayList<AudioSong> mAudioSongs;
     private Random rand;
-    private ListView listViewCreatePL;
-    private Button btnNewPL, btnCancelCreatePL;
+    private ListView listViewCreatePL1;
+    private Button btnOkPL1, btnCancelPL1, btnOkPL2, btnCancelPL2;
     private EditText edtxPlNameCreatePL;
-    private ArrayList<String> playlistNames = new ArrayList<>();
     private AudioSong plAudioSong;
     private Playlist playlist;
     private ArrayList<AudioSong> plAudioSongs = new ArrayList<>();
@@ -114,6 +117,12 @@ public class PlayerActivity extends AppCompatActivity {
     private int iArtist, iAlbum;
     private Equalizer mEqualizer;
     private Boolean firstTime = null;
+    private ArrayList<String> playlistNames = new ArrayList<>();
+    private Set<String> setOfPlNames = new HashSet<>();
+    private SharedPreferences mSharedPreferences;
+    private SharedPreferences.Editor mEditor;
+    private ArrayList<Playlist> playlists = new ArrayList<>();
+    private ArrayList<AudioSong> plSongs;
 
 
     @RequiresApi(api = Build.VERSION_CODES.O)
@@ -124,6 +133,11 @@ public class PlayerActivity extends AppCompatActivity {
 
         init();
 
+        /*mainActivity.mSharedPreferences = getApplicationContext().getSharedPreferences("MyPref", 0); // 0 - for private mode
+        mainActivity.mEditor = mainActivity.mSharedPreferences.edit();*/
+
+        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(PlayerActivity.this);
+        mEditor = mSharedPreferences.edit();
 
         if (isFirstTime()) {
             Tutorial();
@@ -188,10 +202,10 @@ public class PlayerActivity extends AppCompatActivity {
             }
         });
 
-        ImgvPl.setOnClickListener(new View.OnClickListener() {
+        ImgBtnPl.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showPLdialog(getCurrentFocus());
+            showPlDialog();
             }
         });
 
@@ -354,6 +368,99 @@ public class PlayerActivity extends AppCompatActivity {
         }
     }
 
+    private void showPlDialog() {
+        LayoutInflater factory = LayoutInflater.from(this);
+        View plDialogView1 = factory.inflate(R.layout.playlist_view_dialog, null);
+        final AlertDialog plDialog1 = new AlertDialog.Builder(this).create();
+        listViewCreatePL1 = plDialogView1.findViewById(R.id.dialoglist);
+        loadPlList();
+        btnOkPL1 = plDialogView1.findViewById(R.id.btn_new_pl);
+        btnCancelPL1 = plDialogView1.findViewById(R.id.btn_cancel);
+        plDialog1.setTitle("Add to Playlist");
+        plDialog1.setView(plDialogView1);
+        plDialog1.show();
+        btnCancelPL1.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                plDialog1.dismiss();
+            }
+        });
+        btnOkPL1.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                LayoutInflater factory = LayoutInflater.from(PlayerActivity.this);
+                View plDialogView2 = factory.inflate(R.layout.new_playlist, null);
+                final AlertDialog plDialog2 = new AlertDialog.Builder(PlayerActivity.this).create();
+                plDialog2.setTitle("Create Playlist");
+                plDialog2.setView(plDialogView2);
+                edtxPlNameCreatePL = plDialogView2.findViewById(R.id.edtx_pl_name);
+                btnOkPL2 = plDialogView2.findViewById(R.id.btn_ok);
+                btnOkPL2.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        if (!edtxPlNameCreatePL.getText().equals("")) {
+                        if (!playlistNames.contains(edtxPlNameCreatePL.getText().toString())) {
+                            playlistNames.add(edtxPlNameCreatePL.getText().toString());
+                            playlists.add(new Playlist(edtxPlNameCreatePL.getText().toString()));
+                            savePlList(playlists);
+                            loadPlList();
+                            plDialog2.dismiss();
+                        } else makeToast("Playlist already exists");
+                        }
+                    }
+                });
+                btnCancelPL2 = plDialogView2.findViewById(R.id.btn_cancel);
+                btnCancelPL2.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        plDialog2.dismiss();
+                    }
+                });
+                plDialog2.show();
+            }
+        });
+
+        }
+
+    private void savePlList(ArrayList<Playlist> playlists) {
+        SharedPreferences sharedPreferences = getSharedPreferences("PList", MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        Gson gson = new Gson();
+        String json = gson.toJson(playlists);
+        editor.putString("PlayList", json);
+        editor.apply();
+    }
+
+    private void loadPlList() {
+        SharedPreferences sharedPreferences = getSharedPreferences("PList", MODE_PRIVATE);
+        Gson gson = new Gson();
+        String json = sharedPreferences.getString("PlayList", null);
+        Type type = new TypeToken<ArrayList<Playlist>>() {}.getType();
+        if (json != null) {
+         final ArrayList<Playlist> savedPlaylist = gson.fromJson(json, type);
+         for (int i = 0 ; i < savedPlaylist.size(); i++) {
+             if (!playlistNames.contains(savedPlaylist.get(i).getPlName()))
+                 playlistNames.add(savedPlaylist.get(i).getPlName());
+         }
+         listViewCreatePL1.setAdapter(new ArrayAdapter<>(getApplicationContext(), R.layout.simple_pllist_item, playlistNames));
+         listViewCreatePL1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+
+
+             @Override
+             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+
+                 loadPlList();
+                 for (int s = 0 ; s < savedPlaylist.size() ; s++) {
+                     if (savedPlaylist.get(s).getPlName().equals(adapterView.getItemAtPosition(i).toString())) {
+                         savedPlaylist.get(s).setPlSong(mAudioSongs.get(songPosition));
+                     }
+                 }
+
+             }
+         });
+        }
+    }
+
     private void Tutorial() {
                 new GuideView.Builder(this)
                 .setTitle("Song Title")
@@ -447,7 +554,7 @@ public class PlayerActivity extends AppCompatActivity {
                                                                                                                                                                                                                         .setTitle("Playlist")
                                                                                                                                                                                                                         .setContentText("add to Playlist !")
                                                                                                                                                                                                                         .setDismissType(DismissType.anywhere) //optional - default DismissType.targetView
-                                                                                                                                                                                                                        .setTargetView(ImgvPl)
+                                                                                                                                                                                                                        .setTargetView(ImgBtnPl)
                                                                                                                                                                                                                         .setGuideListener(new GuideListener() {
                                                                                                                                                                                                                             @Override
                                                                                                                                                                                                                             public void onDismiss(View view) {
@@ -604,77 +711,9 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
 
-    public void showPLdialog(View view) {
-
-        LayoutInflater factory = LayoutInflater.from(this);
-        final View plDialogView = factory.inflate(R.layout.playlist_view_dialog, null);
-        final AlertDialog plDialog = new AlertDialog.Builder(this).create();
-        listViewCreatePL = plDialogView.findViewById(R.id.dialoglist);
-        edtxPlNameCreatePL = plDialogView.findViewById(R.id.edtx_pl_name);
-        btnNewPL = plDialogView.findViewById(R.id.btn_new_pl);
-
-        if (playlistNames.size() > 0) {
-                ArrayAdapter arrayAdapter = new ArrayAdapter(getApplicationContext(), android.R.layout.simple_list_item_1, playlistNames);
-                listViewCreatePL.setAdapter(arrayAdapter);
-        }
-
-        btnNewPL.setOnClickListener(new View.OnClickListener() {
-            public EditText EdtxPlName;
-            public Button BtnOk, BtnCalcel;
-            public View newPLview;
-
-            @Override
-            public void onClick(View view) {
-                plDialog.dismiss();
-                LayoutInflater factory = LayoutInflater.from(PlayerActivity.this);
-                newPLview = factory.inflate(R.layout.new_playlist, null);
-                final AlertDialog newplDialog = new AlertDialog.Builder(PlayerActivity.this).create();
-                newplDialog.setView(newPLview);
-                EdtxPlName = newPLview.findViewById(R.id.edtx_pl_name);
-                BtnOk = newPLview.findViewById(R.id.btn_ok);
-                BtnCalcel = newPLview.findViewById(R.id.btn_cancel);
-
-                BtnCalcel.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        newplDialog.dismiss();
-                    }
-                });
-
-                BtnOk.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        if (!EdtxPlName.getText().toString().isEmpty()) {
-                            playlistNames.add(EdtxPlName.getText().toString());
-                            newplDialog.dismiss();
-                            ArrayAdapter arrayAdapter = new ArrayAdapter(getApplicationContext(), android.R.layout.simple_list_item_1, playlistNames);
-                            listViewCreatePL.setAdapter(arrayAdapter);
-                            plDialog.show();
-                        }
-                    }
-                });
-
-                newplDialog.show();
-            }
-        });
-
-        if (playlistNames.size() > 0) {
-            ArrayAdapter arrayAdapter = new ArrayAdapter(getApplicationContext(), android.R.layout.simple_list_item_1, playlistNames);
-            listViewCreatePL.setAdapter(arrayAdapter);
-        }
-
-        btnCancelCreatePL = plDialogView.findViewById(R.id.btn_cancel);
-
-        plDialog.setTitle("Add to Playlist");
-
-
-        plDialog.setView(plDialogView);
-        plDialog.show();
-    }
 
 
     private void init() {
-
 
         relativeLayout = findViewById(R.id.p_layout);
         AlbumArtImgV = findViewById(R.id.imgv_albumart);
@@ -772,13 +811,13 @@ public class PlayerActivity extends AppCompatActivity {
         });
 */
 
+        ImgBtnPl = findViewById(R.id.imgbtn_pl);
         ImgBtnEqualizer = findViewById(R.id.imgbtn_music_equalizer);
         ImgBtnLyrics = findViewById(R.id.imgbtn_lyrics);
         ImgvTimer = findViewById(R.id.imgv_timer);
         Imgvrepeat = findViewById(R.id.imgv_repeat);
         ImgvShuffle = findViewById(R.id.imgv_shuffle);
         ImgvFav = findViewById(R.id.imgv_fav);
-        ImgvPl = findViewById(R.id.imgv_pl);
     }
 
 
@@ -1009,7 +1048,7 @@ public class PlayerActivity extends AppCompatActivity {
             }
 
             // check if next song is there or not
-            if (songPosition < (mainActivity.mAudioSongs.size() - 1)) {
+            if (songPosition < (mAudioSongs.size() - 1)) {
 
                 playSong(songPosition + 1);
                 songPosition = songPosition + 1;
@@ -1038,10 +1077,11 @@ public class PlayerActivity extends AppCompatActivity {
     }
 
     private void startFadeOut() {
-        final int FADE_DURATION = 10000; //The duration of the fade
+        playSong(songPosition+1);
+        final int FADE_DURATION = 5000; //The duration of the fade
         //The amount of time between volume changes. The smaller this is, the smoother the fade
         final int FADE_INTERVAL = 250;
-        final float MIN_VOLUME = (float) 0.1; //The volume will increase from 0 to 1
+        final float MIN_VOLUME = (float) 0; //The volume will increase from 0 to 1
         int numberOfSteps = FADE_DURATION / FADE_INTERVAL; //Calculate the number of fade steps
         //Calculate by how much the volume changes each step
         final float deltaVolume = MIN_VOLUME / (float) numberOfSteps;
@@ -1063,9 +1103,11 @@ public class PlayerActivity extends AppCompatActivity {
         timer.schedule(timerTask, FADE_INTERVAL, FADE_INTERVAL);
     }
 
+
     // working fine !
     private void startFadeIn() {
-        final int FADE_DURATION = 10000; //The duration of the fade
+        makeToast("FADEIN");
+        final int FADE_DURATION = 5000; //The duration of the fade
         //The amount of time between volume changes. The smaller this is, the smoother the fade
         final int FADE_INTERVAL = 250;
         final int MAX_VOLUME = 1; //The volume will increase from 0 to 1
@@ -1123,6 +1165,8 @@ public class PlayerActivity extends AppCompatActivity {
 
         return music_volume_level;
     }
+
+
 
     public void playSong(int songIndex) {
 

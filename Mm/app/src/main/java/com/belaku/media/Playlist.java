@@ -5,7 +5,6 @@ import java.util.ArrayList;
 public class Playlist {
 
     private String plName;
-    private AudioSong plSong;
     private ArrayList<AudioSong> plSongs = new ArrayList<>();
 
     public Playlist(String plName) {
@@ -26,5 +25,11 @@ public class Playlist {
 
     public void setPlSongs(ArrayList<AudioSong> plSong) {
         this.plSongs = plSong;
+    }
+
+    public void setPlSong(AudioSong audioSong) {
+        plSongs.add(audioSong);
+        setPlSongs(plSongs);
+
     }
 }

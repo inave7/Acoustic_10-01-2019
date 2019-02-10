@@ -6,6 +6,7 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
@@ -35,15 +37,19 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.io.FileDescriptor;
 import java.lang.reflect.Array;
+import java.lang.reflect.Type;
 import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,19 +67,23 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int MY_PERMISSION_REQUEST = 1;
     public static ArrayList<AudioSong> mAudioSongs = new ArrayList<>(), favoriteSongs = new ArrayList<>(), plSongs = new ArrayList<>();
-    private static RecyclerView mRecyclerView;
+    private RecyclerView mRecyclerView;
     private ArrayList<String> songNames = new ArrayList<>(), favoriteSongNames = new ArrayList<>();
-    public static ArrayList<Playlist> playlists = new ArrayList<>();
-    private MyAdapter artistAdapter, albumAdapter, songsAdapter, favoriteSongsAdapter,plSongsAdapter;
+    private MyAdapter artistAdapter, albumAdapter, songsAdapter, favoriteSongsAdapter,plNamesAdapter;
     private boolean permission;
     private Cursor musicCursor;
-    private int albumIDcolumn;
     private Cursor musicCursorAlbumArt;
     private Map<String, String> mapAlbumArtIDs = new HashMap();
     private ViewPager vpPager;
     private static Context mContext;
     private static ArrayList<String> mSongs, mArtists, mAlbums;
     private ImageButton ImgBtnBack;
+    public static ArrayList<Playlist> playlists;
+    private ArrayList<String> plNames = new ArrayList<>();
+    private ArrayList<String> playlistNames = new ArrayList<>();
+    private ArrayList<String> plSongNames = new ArrayList<>();
+    private ImageButton BtnSearch;
+    private EditText editTextSearch;
 
 
     @Override
@@ -84,6 +94,16 @@ public class MainActivity extends AppCompatActivity {
 
         vpPager = (ViewPager) findViewById(R.id.vpPager);
         ImgBtnBack = findViewById(R.id.imgbtn_back);
+        BtnSearch = findViewById(R.id.btn_search);
+        editTextSearch = findViewById(R.id.edtx_search);
+
+        BtnSearch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (editTextSearch.getText().toString().trim().length() > 0)
+                startActivity(new Intent(MainActivity.this, WebActivity.class).putExtra("Srch", editTextSearch.getText().toString()));
+            }
+        });
 
 
         /*playlistNames.add("LOVE");
@@ -91,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         vpPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
 
@@ -235,79 +256,77 @@ public class MainActivity extends AppCompatActivity {
                     } else mRecyclerView.setAdapter(null);
 
                 } else if (position == 4) {
-                    if (playlists.size() > 0) {
-                        final ArrayList<String> plNames = new ArrayList<>();
-                        for (int i = 0 ; i < playlists.size() ; i++) {
-                            plNames.add(playlists.get(i).getPlName());
+                loadPlList();
+                } else if (position == 5) {
+                    final ArrayList<String> top10 = new ArrayList<>();
+                    top10.add("Top 10 International");
+                    top10.add("Bollywood");
+                    top10.add("Kannada");
+                    mRecyclerView.setAdapter(new MyAdapter(getApplicationContext(), top10, new CustomItemClickListener() {
+                        @Override
+                        public void onItemClick(View v, int position) {
+                            makeToast("yet2impl - " + top10.get(position));
                         }
-                        MyAdapter adapter = new MyAdapter(mContext, plNames, new CustomItemClickListener() {
-                            @Override
-                            public void onItemClick(View v, int position) {
-                                final ArrayList<String> plSongNames = new ArrayList<>();
-                                makeToast(plNames.get(position));
-                                for (int q = 0 ; q < playlists.size(); q++) {
-                                    if (playlists.get(q).getPlName().equals(plNames.get(position))) {
-                                        for (int w = 0; w < playlists.get(q).getPlSongs().size(); w++) {
-                                            plSongNames.add(playlists.get(q).getPlSongs().get(w).getTitle());
-                                        }
-                                    }
+                    }));
+                }
+            }
+
+
+            private void loadPlList() {
+                SharedPreferences sharedPreferences = getSharedPreferences("PList", MODE_PRIVATE);
+                Gson gson = new Gson();
+                String json = sharedPreferences.getString("PlayList", null);
+                Type type = new TypeToken<ArrayList<Playlist>>() {
+                }.getType();
+                if (json != null) {
+                //    final ArrayList<Playlist> savedPlaylist = gson.fromJson(json, type);
+                    setPlAdapter(gson, json, type);
+                }
+            }
+
+            private void setPlAdapter(Gson gson, String json, Type type) {
+                /*SharedPreferences sharedPreferences = getSharedPreferences("PList", MODE_PRIVATE);
+                Gson gson = new Gson();
+                String json = sharedPreferences.getString("PlayList", null);
+                Type type = new TypeToken<ArrayList<Playlist>>() {}.getType();
+                if (json != null) {*/
+                    final ArrayList<Playlist> savedPlaylist = gson.fromJson(json, type);
+                    for (int i = 0 ; i < savedPlaylist.size(); i++) {
+                        if (!playlistNames.contains(savedPlaylist.get(i).getPlName()))
+                            playlistNames.add(savedPlaylist.get(i).getPlName());
+                    }
+                    mRecyclerView.setAdapter(new MyAdapter(getApplicationContext(), playlistNames, new CustomItemClickListener() {
+                        @Override
+                        public void onItemClick(View v, int position) {
+
+                            for (int i = 0 ; i < savedPlaylist.size(); i++) {
+                                if (savedPlaylist.get(i).getPlName().equals(playlistNames.get(position).toString())) {
+                                    plSongs.clear();
+                                    plSongs.addAll(savedPlaylist.get(i).getPlSongs());
                                 }
-                                MyAdapter myAdapter = new MyAdapter(mContext, plSongNames, new CustomItemClickListener() {
+                            }
+                            if (plSongs.size() > 0) {
+                                makeToast("retreving songs from Playlist : " + playlistNames.get(position));
+                                for (int i = 0 ; i < plSongs.size() ; i++) {
+                                    if (!plSongNames.contains(plSongs.get(i).getTitle()))
+                                    plSongNames.add(plSongs.get(i).getTitle());
+                                }
+                                mRecyclerView.setAdapter(new MyAdapter(getApplicationContext(), plSongNames, new CustomItemClickListener() {
                                     @Override
                                     public void onItemClick(View v, int position) {
-                                    for (int e = 0 ; e < mAudioSongs.size(); e++) {
-                                        if (mAudioSongs.get(e).getTitle().equals(plSongNames.get(position))) {
-                                            plNames.add(mAudioSongs.get(e).getTitle());
-                                            plSongs.add(mAudioSongs.get(e));
-                                        }
+                                        Gson gson = new Gson();
+                                        String jsonString = gson.toJson(plSongs);
+
+                                        Intent pIntent = new Intent(MainActivity.this, PlayerActivity.class).putExtra("position", position)
+                                                .putExtra("KEY", jsonString);
+                                        startActivity(pIntent);
                                     }
-
-                                        plSongsAdapter = new MyAdapter(mContext, plSongNames, new CustomItemClickListener() {
-                                            @Override
-                                            public void onItemClick(View v, int position) {
-                                                Gson gson = new Gson();
-                                                String jsonString = gson.toJson(plSongs);
-
-                                                Intent pIntent = new Intent(MainActivity.this, PlayerActivity.class).putExtra("position", position)
-                                                        .putExtra("KEY", jsonString);
-                                                startActivity(pIntent);
-                                            }
-                                        });
-                                        mRecyclerView.setAdapter(plSongsAdapter);
-                                    }
-                                });
-                                mRecyclerView.setAdapter(myAdapter);
-                            }
-                        });
-                        mRecyclerView.setAdapter(adapter);
-                    }
-                    /*favoriteSongNames.clear();
-                    ImgBtnBack.setVisibility(View.INVISIBLE);
-                    for (int i = 0 ; i < mAudioSongs.size() ; i++) {
-                        if (mAudioSongs.get(i).isFavorite)
-                            favoriteSongs.add(mAudioSongs.get(i));
-                    }
-                    if (favoriteSongs.size() > 0) {
-                        for (int i = 0; i < favoriteSongs.size(); i++) {
-                            favoriteSongNames.add(favoriteSongs.get(i).getTitle());
+                                }));
+                                plSongs.clear();
+                            } else makeToast("no Songs in playlist");
                         }
-                        if (favoriteSongNames.size() > 0) {
-                            favoriteSongsAdapter = new MyAdapter(mContext, favoriteSongNames, new CustomItemClickListener() {
-                                @Override
-                                public void onItemClick(View v, int position) {
-                                    Gson gson = new Gson();
-                                    String jsonString = gson.toJson(favoriteSongs);
-
-                                    Intent pIntent = new Intent(MainActivity.this, PlayerActivity.class).putExtra("position", position)
-                                            .putExtra("KEY", jsonString);
-                                    startActivity(pIntent);
-                                }
-                            });
-                            mRecyclerView.setAdapter(favoriteSongsAdapter);
-                        }
-                    } else mRecyclerView.setAdapter(null);*/
-
-                }
+                    }));
+            //    }
             }
 
             @Override
@@ -334,6 +353,14 @@ public class MainActivity extends AppCompatActivity {
             //      mRecyclerView.setAdapter(adapter);
         }
 
+    }
+
+    public ArrayList<String> getArrayListOfPlNames(String key){
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        Set<String> value = preferences.getStringSet(key, null);
+        if (value != null)
+        return new ArrayList<>(value);
+        else return null;
     }
 
 
@@ -497,22 +524,14 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            musicCursor.moveToFirst();
-            makeToast("AlID - " + musicCursor.getString(albumIDcolumn));
-            return true;
-        }
+        // as you specify a parent activity in AndroidManifest.xml.ƒ
 
         return super.onOptionsItemSelected(item);
     }
 
 
     public class MyPagerAdapter extends FragmentPagerAdapter {
-        private int NUM_ITEMS = 5;
+        private int NUM_ITEMS = 6;
         private MyAdapter adapter;
 
         public MyPagerAdapter(FragmentManager fragmentManager) {
@@ -574,6 +593,8 @@ public class MainActivity extends AppCompatActivity {
                     return MainFragment.newInstance(mContext, 3, "Favorites", mAudioSongs);
                 case 4: // Fragment # 1 - This will show SecondFragment
                     return MainFragment.newInstance(mContext, 4, "Playlists", mAudioSongs);
+                case 5: // Fragment # 1 - This will show SecondFragment
+                    return MainFragment.newInstance(mContext, 4, "Top 10", mAudioSongs);
                 default:
                     return null;
             }
@@ -592,6 +613,8 @@ public class MainActivity extends AppCompatActivity {
                 return "Favorites";
             else if (position == 4)
                 return "Playlists";
+            else if (position == 5)
+                return "Top 10";
             else
                 return null;
         }
